@@ -1,0 +1,6 @@
+[submodule "l10n"]
+	path = l10n
+	url = https://github.com/louispan/l10n.git
+[submodule "websockets"]
+	path = websockets
+	url = https://github.com/jaspervdj/websockets.git
