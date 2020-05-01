@@ -1,11 +1,13 @@
-module Smalltalk.UI.Base() where
+module Smalltalk.UI.GTK() where
     import Smalltalk.Base
+    import Smalltalk.Hash
     import Pipes
     import           GI.Gtk
     import           GI.Gtk.Declarative
     import           GI.Gtk.Declarative.App.Simple
     import Data.Array
     import Control.Concurrent.Thread.Delay
+    import Data.IORef
     process [] v = v
     process (fsts:rsts) v = fsts v >>= (process rsts)
     toIO:: Monad x -> IO x
@@ -13,7 +15,7 @@ module Smalltalk.UI.Base() where
         putStr ""
         old
     data Run t = Running t | Closed
-    data SUILocation = Desktop | Settings
+    data SUILocation = Desktop {term:: IORef Pipe String String IO ()} | Settings
     data SUIState = NonManaged {internal::(Run SUILocation)} | Managed {base::SUIState,eventStream::Producer SUIEvent IO ()} 
     data SUIEvent = Hide | Close | Show | NullSUIEvent | WrapAsyncSUI {evtAsync::IO SUIEvent} 
     data CloseDialog = Waiting | CDHasEvent {evt :: SUIEvent} | InProcessOfClosing {evt::SUIEvent} 
@@ -48,7 +50,7 @@ module Smalltalk.UI.Base() where
     closeDialogReduce (True) (InProcessOfClosing v) _ = Transition (CDHasEvent v) (return Nothing)
     closeDialogReduce (False) (InProcessOfClosing v) _ = Transition (CDHasEvent v) (return Nothing)
     closeDialogReduce _ (CDHasEvent evt) _ = Exit
-    systemUIReduce (s) (WrapAsyncSUI v) = Transition (s) (v)
+    systemUiReduce (s) (WrapAsyncSUI v) = Transition (s) (v)
     systemUiReduce (NonManaged _) (Show) = Transition (NonManaged (Run Desktop)) (return Nothing)
     systemUiReduce (NonManaged _) (Hide) = Transition (NonManaged Closed) (let c = Cont (/f -> [(evt) $ run App{view = closeSysUI, update = closeDialogReduce True,initialState = Waiting,inputs: []}) >>= f,(delay 20000) >>= (/_ -> f Hide)]) in toIO c)
     systemUiReduce (NonManaged _) (Close) = Exit
@@ -60,3 +62,37 @@ module Smalltalk.UI.Base() where
                     putStr ""
                     evt
                 )))
+    sysUIShell state = forever $ do
+        v <- await
+        let (Running v2) = state
+        modifyIORef (term v2) (/v3 -> v:v3)
+    sysTerminal ref = forever $ do
+        v <- readIORef ref
+        v2 <- await
+        writeIORef ref (v ++ v2)
+    sysUIStartupTerm args = do
+        swapIn <- newIORef []
+        swapOut <- newIORef []
+        ref <- newIORef (forever $ do
+            v <- yield
+            modifyIORef swapIn (/x -> v:x)
+            out <- readIORef swapOut
+            let h = /o -> f o where
+                f [] = Nothing
+                f (x:ys) = Just do
+                    writeIORef swapOut ys
+                    await x
+            h out
+            )
+        fv <- fork
+        av <- if fv === 1 then run App{view = systemUiView,update = systemUiReduce,initialState = Running (Desktop )} else (forever $ do
+            v <- yield
+            modifyIORef swapOut (/x -> v:x)
+            out <- readIORef swapIn
+            let h = /o -> f o where
+                f [] = Nothing
+                f (x:ys) = Just do
+                    writeIORef swapIn ys
+                    await x
+            h out
+            )

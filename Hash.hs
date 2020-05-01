@@ -3,10 +3,30 @@ module Smalltalk.Hash(startup) where
     import qualified Pipes.Prelude as P
     import qualified Data.Map as M
     import Data.List.Split
-    startup m = do
-        forever $ do
-            cmd <- getLine
-            let l = splitOn "|" cmd
-            let ml1 = map (/v -> M.lookup v m) l
-            let r = P.stdinLn >->  (foldl (/v acc -> acc >-> v) ml1) >-> P.stdoutLn
-            runEffect r
+    import Smalltalk.Cont
+    import Data.IORef
+    cat :: Monad m => Pipe a a m r
+    cat = forever $ do
+        x <- await
+        yield x
+    startup m (Nothing) a b = startup (do
+yield ""
+        ) a b
+    startup m (Just init) (Just input) (Nothing) = startup m (Just init) (Just input) (Just P.stdoutLn)
+    startup m (Just init) (Nothing) (Just output) = startup m (Just init) (Just P.stdinLn) (Just output)
+    startup m (Just init) (Nothing) (Nothing) = startup m (Just init) (Nothing) (Just P.stdoutLn)
+    startup m (Just init) (Just input) (Just output) = do
+        ref <- newIORef 0
+        let s = /initb -> do
+            forever $ do
+                cmd <- await
+                let l = splitOn "|" cmd
+                let ml1 = map (/v -> let (cmd,args) = splitOn " " v in M.lookup cmd m args) l
+                let r = (if initb then init else input) >->  (foldl (/v acc -> acc >-> v) cat ml1) >-> output
+                runEffect r
+        av <- Cont (/f -> map (/io -> Cont(/f2 -> io >>= f2)) ([(runEffect (init >-> s True)) >>= f,(runEffect (input >-> s False)) >>= f]))
+        modifyIORef ref (+1)
+        v <- readIORef ref
+        let ef = if v /= 2 then forever else (/v -> v)
+        ef $ do
+            Nothing
