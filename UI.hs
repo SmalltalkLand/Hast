@@ -1,5 +1,5 @@
-module Smalltalk.UI.GTK() where
-    import Smalltalk.Base
+module Smalltalk.UI.GTK(Desktop(Desktop) desktops sysUIStartupTerm) where
+    import Smalltalk.Objects
     import Smalltalk.Hash
     import Pipes
     import           GI.Gtk
@@ -8,21 +8,25 @@ module Smalltalk.UI.GTK() where
     import Data.Array
     import Control.Concurrent.Thread.Delay
     import Data.IORef
+    import System.IO.Unsafe
     process [] v = v
     process (fsts:rsts) v = fsts v >>= (process rsts)
+    fork = Cont (/f -> [f 0,f 1])
     toIO:: Monad x -> IO x
     toIO old = do
         putStr ""
         old
     data Run t = Running t | Closed
-    data SUILocation = Desktop {term:: IORef Pipe String String IO ()} | Settings
+    data SUILocation = Desktop {term:: IORef (Pipe String String IO ()),objVM:: Maybe (IORef (Object))} | Settings
     data SUIState = NonManaged {internal::(Run SUILocation)} | Managed {base::SUIState,eventStream::Producer SUIEvent IO ()} 
     data SUIEvent = Hide | Close | Show | NullSUIEvent | WrapAsyncSUI {evtAsync::IO SUIEvent} 
     data CloseDialog = Waiting | CDHasEvent {evt :: SUIEvent} | InProcessOfClosing {evt::SUIEvent} 
     data CDEvent = SetToCDHasEvent | CDDefault {evt::SUIEvent} 
-    data Desktop = Desktop {windows::Array Widget} 
+    data Desktop = Desktop {windows::Array Widget}
+    desktops::IORef [Desktop]
+    desktops = unsafePerformIO (newIORef [])
     systemUiView (NonManaged (Closed)) = bin Window [] (widget Button [on #clicked (Show)])
-    systemUiView (NonManaged (Running s)) = bin Window [on #deleteEvent (Hide)] (container Notebook [] (map (page "Desktop" . (/d -> map (bin Window []) (windows d)) []))
+    systemUiView (NonManaged (Running s)) = bin Window [on #deleteEvent (Hide)] (container Notebook [] (map (page "Desktop" . (/d -> map (bin Window []) (windows d)) (unsafePerformIO $ readIORef desktops)))
     systemUiView (Managed base) = systemUiView base
     closeSysUI (Waiting) = bin Window [] (container Box [] (map (BoxChild defaultBoxChildProperties) [
         widget Button [on #clicked (CDDefault Close), #label := "Close Permanently"]

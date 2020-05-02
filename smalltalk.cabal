@@ -1,10 +1,11 @@
 library
-  -- exposed-modules: Smalltalk.Base Smalltalk.UI.Base
+  -- exposed-modules: Smalltalk.Base Smalltalk.UI.GTK Smalltalk.Hash Smalltalk.Cont Smalltalk.Y Smalltalk.Objects Smalltalk.ProcessPlugin
   -- other-modules:
   -- other-extensions:
   build-depends:       gi-gtk
     , gi-gtk-declarative
     , gi-gtk-declarative-app-simple
+    , parallel-io
     , base >= 4.11 && <4.12
   hs-source-dirs:      src
   default-language:    Haskell2010

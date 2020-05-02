@@ -1,4 +1,4 @@
-module Smalltalk.Hash(startup Plugin(Plugin)) where
+module Smalltalk.Hash(startup Plugin(Plugin) cat) where
     import Pipes
     import qualified Pipes.Prelude as P
     import qualified Data.Map as M
@@ -10,7 +10,7 @@ module Smalltalk.Hash(startup Plugin(Plugin)) where
     import Control.Concurrent.Thread.Delay
     mapP :: Monad m => (a -> b) -> Pipe a b m r
     mapP f = for cat $ \x -> yield (f x)
-    data Plugin m a = Plugin {inStream::String -> m a,outStream::a -> m String}
+    data Plugin m a = Plugin {inStream::String -> m a,outStream::a -> m String,lookupHijack::String -> m (Maybe (M.Map String ([String] ->  Pipe String String m ()) -> [String] -> Pipe String String m ()))}
     cat :: Monad m => Pipe a a m r
     cat = forever $ do
         x <- await
@@ -36,7 +36,7 @@ yield ""
                 )) $ forever $ do
                 cmd <- await
                 let l = splitOn "|" cmd
-                let ml1 = map (/v -> let (cmd,args) = splitOn " " v in M.lookup cmd m args) l
+                ml1 <- foldl (/v acc -> acc >>= (/a -> v >>= (/v0 -> v0:a))) (map (/v -> let (cmd,args) = splitOn " " v in (foldl (/v0 acc -> vo >>= (/v -> if acc == Nothing then v else acc)) (map (/f -> f cmd) (map lookupHijack plugins)) (return . Just . M.lookup cmd)) >>= (/f -> f m arg) l) (return [])
                 pl1 <- (mapP (foldl (.) (map (pluginRender inStream outStream) (zip plugins [0..]))) (catAsync))
                 pl2 <- (mapP (foldr (.) (map (pluginRender outStream inStream) (zip plugins [0..]))) (catAsync))
                 let r = (if initb then init else input) >->  (foldl (/v acc -> acc >-> (pl1) >-> v >-> (pl2)) cat ml1) >-> output
@@ -45,15 +45,17 @@ yield ""
         modifyIORef ref (+1)
         v <- readIORef ref
         let ef = if v /= 2 then forever else (/v -> v)
-        (/m -> catch m (/e -> return Just (show (e::SomeException)))) $ ef $ do
+        rv <- (/m -> catch m (/e -> return Just (show (e::SomeException)))) $ ef $ do
             r <- readIORef exref
             if r then error "Restarting..." else Nothing
             Nothing
-        delay 2000
-        yield "Quit? (Y/N)" >-> output;
-        v2 <- next input
-        let (Right v3) = v2
-        if (fst v3) == 'Y' then do
-            writeIoRef exref True
-            Nothing
-        else startup m plugins (Just init) (Just input) (Just output)
+        if rv == Nothing then do
+            delay 2000
+            yield "Quit? (Y/N)" >-> output;
+            v2 <- next input
+            let (Right v3) = v2
+            if (fst v3) == 'Y' then do
+                writeIoRef exref True
+                Nothing
+            else startup m plugins (Just init) (Just input) (Just output)
+        else Nothing
