@@ -44,11 +44,10 @@ yield ""
         av <- Cont (/f -> map (/io -> Cont(/f2 -> io >>= f2)) ([(runEffect (init >-> s True)) >>= f,(runEffect (input >-> s False)) >>= f]))
         modifyIORef ref (+1)
         v <- readIORef ref
-        let ef = if v /= 2 then forever else (/v -> v)
+        let ef = if v /= 2 then forever else id
         rv <- (/m -> catch m (/e -> return Just (show (e::SomeException)))) $ ef $ do
             r <- readIORef exref
             if r then error "Restarting..." else Nothing
-            Nothing
         if rv == Nothing then do
             delay 2000
             yield "Quit? (Y/N)" >-> output;

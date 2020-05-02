@@ -1,4 +1,4 @@
-module Smalltalk.Objects(Object(SmallInteger,FuncObject,StringObj) ClassState(HasClass,HasNoClass) ObjectContext(ExternalObjectContext) stObject data_ scripts klass send ObjectMonad(ObjectMonad) obj) where
+module Smalltalk.Objects(Object(SmallInteger,FuncObject,StringObj) ClassState(HasClass,HasNoClass) ObjectContext(ExternalObjectContext) stObject data_ scripts klass send introspect ObjectMonad(ObjectMonad) obj Send) where
     import qualified L10n as LC
     import Smalltalk.Cont
     import Data.Dynamic
@@ -11,12 +11,14 @@ module Smalltalk.Objects(Object(SmallInteger,FuncObject,StringObj) ClassState(Ha
         deriving (Show, Eq)
     show (InternalObjectContext id data) = "<Internal Object Context id: " ++ show id ++ " data: " ++ show fromDyn(data::Show) ++ " >"
     show (ExternalObjectConext) = "<External Object Context>"
+    type Send = Dynamic -> [Object] -> (Object -> Dynamic) -> Dynamic
     data Object =
         NormalObj {
             data_ :: [Object]
             ,scripts :: [String -> Dynamic]
             ,klass :: ClassState
-            ,send :: Dynamic -> [Object] -> (Object -> Dynamic) -> Dynamic}  |
+            ,send :: Send
+            ,introspect :: Send}  |
         FuncObject {data_ :: (Dynamic -> Dynamic)} |
         SmallInteger {data_ :: Int} |
         StringObject {data_ :: [Char]}
@@ -33,8 +35,8 @@ module Smalltalk.Objects(Object(SmallInteger,FuncObject,StringObj) ClassState(Ha
         >>= (ObjectMonad a) f = ContWOM (Cont (/f2 -> f2 (let s = send a in s ">>=" [] (f2 . f))) >>= cont)
         >>= (ContWOM conta) f = ContWOM (conta >>= (cont . (/v -> v >>= (id)) . f))
     stObject = /ctxt -> stY (/ setKlass klass -> stY (/setData data_ -> stY(/setScripts scripts ->
-        NormalObj data scripts (if klass == "nil" then HasNoClass else HasClass klass) stY(/redo m args r ->
-            (if klass == "nil" then m else (data_ (fst (filter (/a ->
+        (/a b -> a (b False) (b True)) (NormalObj data scripts (if klass == "nil" then HasNoClass else HasClass klass)) (/i -> stY (/redo m args r ->
+            (if (or (klass == "nil") i) then m else (data_ (fst (filter (/a ->
                 (fst (fst a)) == m) (fst (fst klass))))))
             scripts (/newScripts ->
                 setScripts newScripts)
@@ -50,4 +52,4 @@ module Smalltalk.Objects(Object(SmallInteger,FuncObject,StringObj) ClassState(Ha
                 . (/v -> 
                     foldl (/s v -> s "return" m rer tag v) v scripts
                 ))
-    ))))
+    )))))

@@ -25,7 +25,7 @@ module Smalltalk.Init() where
                 for P.stdinLn yield
             ) Nothing
         else if s == "gui-gtk" then do
-            runEffect (P.stdinLn >-> sysUIStartupTerm [] >-> P.stdoutLn)
+            runEffect (P.stdinLn >-> (sysUIStartupTerm []) >-> P.stdoutLn)
         else return Nothing
         putStr "Exit? (Y/N)"
         ex <- getLine
