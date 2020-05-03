@@ -1,1 +1,1 @@
-# Hast
+# Hast: Smalltalk Haskell Monorepo including the source for Smalltalk Twenty
